@@ -18,9 +18,18 @@ const TAB_SCREENS = {
 };
 
 export default function App() {
-  const { currentUser, role, tab, stack } = useApp();
+  const { status, currentUser, role, tab, stack } = useApp();
 
-  // Not signed in → the only thing you can reach is the login / first-run setup.
+  if (status === 'loading') {
+    return (
+      <PhoneFrame>
+        <div className="screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>Loading…</div>
+        </div>
+      </PhoneFrame>
+    );
+  }
+
   if (!currentUser) {
     return <PhoneFrame><Login /></PhoneFrame>;
   }
