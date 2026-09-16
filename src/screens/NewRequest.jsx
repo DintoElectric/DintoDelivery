@@ -1,24 +1,24 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useApp } from '../state/store.jsx';
-import { JOBS } from '../data/seed.js';
 
 export default function NewRequest() {
-  const { back, createRequest, addAlert, setTab, role } = useApp();
+  const { back, createRequest, addAlert, setTab, jobs, contacts, currentUser } = useApp();
 
   const [type, setType] = useState('Delivery');
-  const [job, setJob] = useState(JOBS[0].number);
+  const [jobId, setJobId] = useState(jobs[0]?.id || '');
   const [desc, setDesc] = useState('');
   const [neededDate, setNeededDate] = useState('');
   const [neededTime, setNeededTime] = useState('');
   const [address, setAddress] = useState('');
   const [gate, setGate] = useState('');
-  const [contact, setContact] = useState('R. Alvarez · (206) 555-0148');
+  const [contactId, setContactId] = useState('');
+
+  const job = jobs.find((j) => j.id === jobId) || null;
+  const contact = contacts.find((c) => c.id === contactId) || null;
 
   // Required: type, job, description, needed-by date, address.
   const valid = type && job && desc.trim() && neededDate.trim() && address.trim();
-
-  const jobName = JOBS.find((j) => j.number === job)?.name || '';
 
   const submit = () => {
     if (!valid) return;
@@ -27,18 +27,24 @@ export default function NewRequest() {
       : `${address}${gate ? ', ' + gate : ''} → Shop 1`;
     const neededBy = neededDate + (neededTime ? ', ' + neededTime : '');
     createRequest({
-      title: desc.trim(), type, route, job,
-      contact: contact.split(' · ')[0], neededBy,
+      title: desc.trim(), type, route,
+      job: job.number, jobId: job.id, jobName: job.name,
+      contact: contact?.name || '', contactId: contact?.id || '',
+      contactPhone: contact?.phone || '', contactEmail: contact?.email || '',
+      neededBy, pickup: type === 'Pickup' ? address : 'Shop 1',
+      dropoff: type === 'Delivery' ? `${address}${gate ? ', ' + gate : ''}` : 'Shop 1',
+      gate, raisedByName: currentUser?.name || '', raisedByRole: currentUser?.role || '',
     });
     addAlert({
       id: 'al' + Date.now(), day: 'Today', kind: 'New request', unread: true,
-      headline: `${contact.split(' · ')[0]} requested a ${type.toLowerCase()} for ${neededDate || 'a date'} — ${jobName}`,
-      meta: `Job ${job} · needs a date · just now`,
+      headline: `${currentUser?.name || 'Someone'} requested a ${type.toLowerCase()} for ${neededDate || 'a date'} — ${job.name}`,
+      meta: `Job ${job.number} · needs a date · just now`,
     });
     setTab('schedule');
   };
 
   const addrLabel = type === 'Delivery' ? 'Deliver to — address & gate' : 'Pick up from — address & gate';
+  const noJobs = jobs.length === 0;
 
   return (
     <div className="screen anim-modal">
@@ -53,6 +59,12 @@ export default function NewRequest() {
       </div>
 
       <div className="screen__scroll" style={{ paddingBottom: 116 }}>
+        {noJobs && (
+          <div style={{ padding: '16px 20px', background: 'var(--color-surface)', borderBottom: '1px solid var(--rule-light)', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            No jobs have been set up yet. Ask your shop manager to add a job before raising a request.
+          </div>
+        )}
+
         {/* What kind */}
         <Group label="What kind">
           <div style={{ display: 'flex', border: '1px solid var(--rule-strong)' }}>
@@ -66,9 +78,7 @@ export default function NewRequest() {
                     font: '800 12px/1 var(--font)', letterSpacing: '.06em', textTransform: 'uppercase',
                     background: on ? 'var(--color-accent)' : 'transparent',
                     color: on ? 'var(--color-bg)' : 'var(--color-text)',
-                  }}>
-                  {opt}
-                </button>
+                  }}>{opt}</button>
               );
             })}
           </div>
@@ -77,9 +87,9 @@ export default function NewRequest() {
         {/* Job */}
         <Group label="Job / project number">
           <div style={{ ...boxInput, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 13px' }}>
-            <select value={job} onChange={(e) => setJob(e.target.value)}
-              style={{ ...bareSelect, flex: 1 }}>
-              {JOBS.map((j) => <option key={j.number} value={j.number}>{j.number} · {j.name}</option>)}
+            <select value={jobId} onChange={(e) => setJobId(e.target.value)} style={{ ...bareSelect, flex: 1 }} disabled={noJobs}>
+              {noJobs && <option value="">No jobs available</option>}
+              {jobs.map((j) => <option key={j.id} value={j.id}>{j.number} · {j.name}</option>)}
             </select>
             <ChevronDown size={14} strokeWidth={2.2} />
           </div>
@@ -119,10 +129,12 @@ export default function NewRequest() {
 
         {/* Contact */}
         <Group label="Contact on site" last>
-          <div style={{ ...boxInput, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 13px' }}>
-            <input value={contact} onChange={(e) => setContact(e.target.value)}
-              style={{ ...bareSelect, flex: 1, fontWeight: 800 }} />
-            <span style={{ font: '800 10px/1 var(--font)', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-accent)' }}>Me</span>
+          <div style={{ ...boxInput, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 13px' }}>
+            <select value={contactId} onChange={(e) => setContactId(e.target.value)} style={{ ...bareSelect, flex: 1 }}>
+              <option value="">Select a contact</option>
+              {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ' · ' + c.phone : ''}</option>)}
+            </select>
+            <ChevronDown size={14} strokeWidth={2.2} />
           </div>
         </Group>
       </div>
