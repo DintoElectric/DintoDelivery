@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { useApp } from '../state/store.jsx';
 
 export default function NewRequest() {
-  const { back, createRequest, addAlert, setTab, jobs, contacts, currentUser } = useApp();
+  const { back, createRequest, setTab, jobs, contacts, currentUser } = useApp();
 
   const [type, setType] = useState('Delivery');
   const [jobId, setJobId] = useState(jobs[0]?.id || '');
@@ -13,6 +13,8 @@ export default function NewRequest() {
   const [address, setAddress] = useState('');
   const [gate, setGate] = useState('');
   const [contactId, setContactId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const job = jobs.find((j) => j.id === jobId) || null;
   const contact = contacts.find((c) => c.id === contactId) || null;
@@ -20,13 +22,18 @@ export default function NewRequest() {
   // Required: type, job, description, needed-by date, address.
   const valid = type && job && desc.trim() && neededDate.trim() && address.trim();
 
-  const submit = () => {
-    if (!valid) return;
+  const submit = async () => {
+    if (!valid || busy) return;
+    setBusy(true); setError('');
     const route = type === 'Delivery'
       ? `Shop 1 → ${address}${gate ? ', ' + gate : ''}`
       : `${address}${gate ? ', ' + gate : ''} → Shop 1`;
     const neededBy = neededDate + (neededTime ? ', ' + neededTime : '');
-    createRequest({
+    // The server creates the matching "New request" alert as part of this
+    // same call — no separate client-side alert write here. Firing a second,
+    // unrelated write at the same moment is exactly what caused a submitted
+    // request to sometimes vanish (two racing writes, one silently dropped).
+    const res = await createRequest({
       title: desc.trim(), type, route,
       job: job.number, jobId: job.id, jobName: job.name,
       contact: contact?.name || '', contactId: contact?.id || '',
@@ -35,11 +42,8 @@ export default function NewRequest() {
       dropoff: type === 'Delivery' ? `${address}${gate ? ', ' + gate : ''}` : 'Shop 1',
       gate, raisedByName: currentUser?.name || '', raisedByRole: currentUser?.role || '',
     });
-    addAlert({
-      id: 'al' + Date.now(), day: 'Today', kind: 'New request', unread: true,
-      headline: `${currentUser?.name || 'Someone'} requested a ${type.toLowerCase()} for ${neededDate || 'a date'} — ${job.name}`,
-      meta: `Job ${job.number} · needs a date · just now`,
-    });
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'Could not submit the request. Please try again.'); return; }
     setTab('schedule');
   };
 
@@ -52,9 +56,9 @@ export default function NewRequest() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 12px', borderBottom: '2px solid var(--rule-strong)' }}>
         <button type="button" onClick={back} style={navBtn}>Cancel</button>
         <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>New request</div>
-        <button type="button" onClick={submit} disabled={!valid}
-          style={{ ...navBtn, color: valid ? 'var(--color-accent)' : 'var(--text-disabled)', cursor: valid ? 'pointer' : 'not-allowed' }}>
-          Send
+        <button type="button" onClick={submit} disabled={!valid || busy}
+          style={{ ...navBtn, color: (valid && !busy) ? 'var(--color-accent)' : 'var(--text-disabled)', cursor: (valid && !busy) ? 'pointer' : 'not-allowed' }}>
+          {busy ? 'Sending…' : 'Send'}
         </button>
       </div>
 
@@ -141,7 +145,12 @@ export default function NewRequest() {
 
       {/* Bottom bar */}
       <div className="bottombar" style={{ padding: '14px 20px 44px' }}>
-        <button type="button" className="btn-primary" onClick={submit} disabled={!valid}>Submit request</button>
+        {error && (
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--color-accent-700)', marginBottom: 9 }}>{error}</div>
+        )}
+        <button type="button" className="btn-primary" onClick={submit} disabled={!valid || busy}>
+          {busy ? 'Sending…' : 'Submit request'}
+        </button>
         <div style={{ fontSize: 11, color: 'var(--text-label)', marginTop: 9 }}>
           Goes to the shop manager. You get a notice when it is scheduled.
         </div>
