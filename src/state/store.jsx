@@ -1,163 +1,165 @@
-import { createContext, useContext, useReducer, useMemo, useRef, useEffect } from 'react';
+import { createContext, useContext, useReducer, useMemo, useEffect, useRef } from 'react';
 import { ROLE_ACTION } from '../data/seed.js';
-import { loadDB, saveDB, loadSession, saveSession, hashPassword, uid } from '../lib/db.js';
+import * as api from '../lib/api.js';
 
 const AppContext = createContext(null);
 
+// How often a signed-in device quietly re-checks the server for changes made
+// by other users. Netlify Functions are stateless (no open connection), so
+// this polling — plus an immediate refetch on focus/visibility — is what
+// keeps every screen "live" without adding a separate realtime service.
+const POLL_MS = 5000;
+
+const blank = { users: [], contacts: [], jobs: [], requests: [], alerts: [] };
+
 function initState() {
   return {
-    db: loadDB(),                 // { users, contacts, jobs, requests, alerts, nextId }
-    session: loadSession(),       // userId | null
-    tab: 'schedule',              // schedule | requests | alerts | me
-    stack: [],                    // overlays: {type:'detail'|'new'|'calendar'|'manage', id?}
+    status: api.getToken() ? 'loading' : 'anon', // loading | anon | ready
+    me: null,
+    ...blank,
+    tab: 'schedule',
+    stack: [],
   };
 }
 
-function withDB(state, db) { return { ...state, db }; }
-
 function reducer(state, action) {
-  const db = state.db;
   switch (action.type) {
-    case 'LOGIN':
-      return { ...state, session: action.userId, tab: 'schedule', stack: [] };
-    case 'LOGOUT':
-      return { ...state, session: null, tab: 'schedule', stack: [] };
-
+    case 'LOADING': return { ...state, status: 'loading' };
+    case 'ANON':    return { ...initState(), status: 'anon' };
+    case 'SET_STATE': {
+      const s = action.state || {};
+      return {
+        ...state,
+        status: 'ready',
+        me: s.me || null,
+        users: s.users || [], contacts: s.contacts || [], jobs: s.jobs || [],
+        requests: s.requests || [], alerts: s.alerts || [],
+        // reset navigation on a fresh sign-in
+        tab: action.resetNav ? 'schedule' : state.tab,
+        stack: action.resetNav ? [] : state.stack,
+      };
+    }
     case 'SET_TAB': return { ...state, tab: action.tab, stack: [] };
     case 'PUSH':    return { ...state, stack: [...state.stack, action.overlay] };
     case 'POP':     return { ...state, stack: state.stack.slice(0, -1) };
-
-    // --- Users ---
-    case 'ADD_USER':
-      return withDB(state, { ...db, users: [...db.users, action.user] });
-    case 'UPDATE_USER':
-      return withDB(state, { ...db, users: db.users.map((u) => u.id === action.user.id ? { ...u, ...action.user } : u) });
-    case 'DELETE_USER':
-      return withDB(state, { ...db, users: db.users.filter((u) => u.id !== action.id) });
-
-    // --- Contacts ---
-    case 'ADD_CONTACT':
-      return withDB(state, { ...db, contacts: [...db.contacts, action.contact] });
-    case 'UPDATE_CONTACT':
-      return withDB(state, { ...db, contacts: db.contacts.map((c) => c.id === action.contact.id ? { ...c, ...action.contact } : c) });
-    case 'DELETE_CONTACT':
-      return withDB(state, { ...db, contacts: db.contacts.filter((c) => c.id !== action.id) });
-
-    // --- Jobs ---
-    case 'ADD_JOB':
-      return withDB(state, { ...db, jobs: [...db.jobs, action.job] });
-    case 'UPDATE_JOB':
-      return withDB(state, { ...db, jobs: db.jobs.map((j) => j.id === action.job.id ? { ...j, ...action.job } : j) });
-    case 'DELETE_JOB':
-      return withDB(state, { ...db, jobs: db.jobs.filter((j) => j.id !== action.id) });
-
-    // --- Requests / alerts ---
-    case 'CREATE_REQUEST': {
-      const id = String(db.nextId);
-      const req = { id, status: 'Requested', day: null, time: null, ...action.fields };
-      return withDB(state, { ...db, requests: [req, ...db.requests], nextId: db.nextId + 1 });
-    }
-    case 'MOVE_REQUEST':
-      return withDB(state, {
-        ...db,
-        requests: db.requests.map((r) => {
-          if (r.id !== action.id) return r;
-          const day = action.day;
-          const status = day == null ? 'Requested' : (r.status === 'Completed' ? 'Completed' : 'Scheduled');
-          const driver = action.driver !== undefined ? action.driver : r.driver;
-          return { ...r, day, time: day == null ? null : (action.time || '08:00'), status, driver };
-        }),
-      });
-    case 'COMPLETE_REQUEST':
-      return withDB(state, { ...db, requests: db.requests.map((r) => r.id === action.id ? { ...r, status: 'Completed' } : r) });
-    case 'ADD_ALERT':
-      return withDB(state, { ...db, alerts: [action.alert, ...db.alerts] });
-    case 'MARK_ALL_READ':
-      return withDB(state, { ...db, alerts: db.alerts.map((a) => ({ ...a, unread: false })) });
-
-    default:
-      return state;
+    default:        return state;
   }
 }
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initState);
 
-  // Keep the latest db/session in a ref so async actions (login) don't close
-  // over stale state.
-  const ref = useRef(state);
-  ref.current = state;
+  // Restore a session on load.
+  useEffect(() => {
+    if (!api.getToken()) return;
+    let cancelled = false;
+    (async () => {
+      const r = await api.fetchState();
+      if (cancelled) return;
+      if (r.ok) dispatch({ type: 'SET_STATE', state: r.state, resetNav: true });
+      else dispatch({ type: 'ANON' });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  // Persist on change.
-  useEffect(() => { saveDB(state.db); }, [state.db]);
-  useEffect(() => { saveSession(state.session); }, [state.session]);
+  // Live updates: poll the server on an interval while signed in, and refetch
+  // immediately whenever the tab regains focus or becomes visible (covers the
+  // common case of switching back to the app after a moment away). Paused
+  // during an in-progress drag on the calendar so a poll can't yank a banner
+  // out from under someone's finger — see pausePolling/resumePolling below.
+  const pausedRef = useRef(false);
+  const fetchingRef = useRef(false);
+  const statusRef = useRef(state.status);
+  statusRef.current = state.status;
 
-  const actions = useMemo(() => ({
-    // Auth ----------------------------------------------------------------
-    async setupAdmin({ name, username, password }) {
-      const passHash = await hashPassword(password);
-      const user = { id: uid('u'), name, username: username.trim(), passHash, role: 'Shop manager' };
-      dispatch({ type: 'ADD_USER', user });
-      dispatch({ type: 'LOGIN', userId: user.id });
-      return { ok: true };
-    },
-    async login({ username, password }) {
-      const u = ref.current.db.users.find((x) => x.username.toLowerCase() === username.trim().toLowerCase());
-      if (!u) return { ok: false, error: 'No account with that username.' };
-      const passHash = await hashPassword(password);
-      if (passHash !== u.passHash) return { ok: false, error: 'Wrong password.' };
-      dispatch({ type: 'LOGIN', userId: u.id });
-      return { ok: true };
-    },
-    logout: () => dispatch({ type: 'LOGOUT' }),
+  useEffect(() => {
+    if (state.status !== 'ready') return;
 
-    // Users ---------------------------------------------------------------
-    async addUser({ name, username, password, role }) {
-      const exists = ref.current.db.users.some((x) => x.username.toLowerCase() === username.trim().toLowerCase());
-      if (exists) return { ok: false, error: 'That username is taken.' };
-      const passHash = await hashPassword(password);
-      dispatch({ type: 'ADD_USER', user: { id: uid('u'), name, username: username.trim(), passHash, role } });
-      return { ok: true };
-    },
-    async updateUser(id, { name, username, password, role }) {
-      const patch = { id, name, username: username.trim(), role };
-      if (password) patch.passHash = await hashPassword(password);
-      dispatch({ type: 'UPDATE_USER', user: patch });
-      return { ok: true };
-    },
-    deleteUser: (id) => dispatch({ type: 'DELETE_USER', id }),
+    const poll = async () => {
+      if (pausedRef.current || fetchingRef.current) return;
+      fetchingRef.current = true;
+      const r = await api.fetchState();
+      fetchingRef.current = false;
+      if (statusRef.current !== 'ready') return; // signed out mid-request
+      if (r.ok) dispatch({ type: 'SET_STATE', state: r.state });
+      // A transient network hiccup just skips this cycle; the next poll or
+      // focus event will retry. A 401 already logs the user out via api.js.
+    };
 
-    // Contacts ------------------------------------------------------------
-    addContact: (c) => dispatch({ type: 'ADD_CONTACT', contact: { id: uid('c'), ...c } }),
-    updateContact: (contact) => dispatch({ type: 'UPDATE_CONTACT', contact }),
-    deleteContact: (id) => dispatch({ type: 'DELETE_CONTACT', id }),
+    const interval = setInterval(poll, POLL_MS);
+    const onFocus = () => poll();
+    const onVisible = () => { if (document.visibilityState === 'visible') poll(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
 
-    // Jobs ----------------------------------------------------------------
-    addJob: (j) => dispatch({ type: 'ADD_JOB', job: { id: uid('j'), ...j } }),
-    updateJob: (job) => dispatch({ type: 'UPDATE_JOB', job }),
-    deleteJob: (id) => dispatch({ type: 'DELETE_JOB', id }),
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [state.status]);
 
-    // Requests / alerts ---------------------------------------------------
-    createRequest: (fields) => dispatch({ type: 'CREATE_REQUEST', fields }),
-    moveRequest: (id, day, time, driver) => dispatch({ type: 'MOVE_REQUEST', id, day, time, driver }),
-    completeRequest: (id) => dispatch({ type: 'COMPLETE_REQUEST', id }),
-    addAlert: (alert) => dispatch({ type: 'ADD_ALERT', alert }),
-    markAllRead: () => dispatch({ type: 'MARK_ALL_READ' }),
+  const actions = useMemo(() => {
+    // Wrap a mutation: run it, fold the returned state in, surface {ok,error}.
+    const run = async (fn) => {
+      const r = await fn();
+      if (r.ok && r.state) dispatch({ type: 'SET_STATE', state: r.state });
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
+    };
+    return {
+      // Auth
+      async login(username, password) {
+        const r = await api.login(username, password);
+        if (r.ok) dispatch({ type: 'SET_STATE', state: r.state, resetNav: true });
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
+      },
+      async register(name, username, password) {
+        const r = await api.register(name, username, password);
+        if (r.ok) dispatch({ type: 'SET_STATE', state: r.state, resetNav: true });
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
+      },
+      logout() { api.logout(); dispatch({ type: 'ANON' }); },
 
-    // Navigation ----------------------------------------------------------
-    setTab: (tab) => dispatch({ type: 'SET_TAB', tab }),
-    openDetail: (id) => dispatch({ type: 'PUSH', overlay: { type: 'detail', id } }),
-    openNew: () => dispatch({ type: 'PUSH', overlay: { type: 'new' } }),
-    openCalendar: () => dispatch({ type: 'PUSH', overlay: { type: 'calendar' } }),
-    openManage: () => dispatch({ type: 'PUSH', overlay: { type: 'manage' } }),
-    back: () => dispatch({ type: 'POP' }),
-  }), []);
+      // Users / contacts / jobs (manager-gated on the server)
+      addUser: (fields) => run(() => api.userCreate(fields)),
+      updateUser: (id, fields) => run(() => api.userUpdate(id, fields)),
+      deleteUser: (id) => run(() => api.userDelete(id)),
+      addContact: (c) => run(() => api.contactCreate(c)),
+      updateContact: (contact) => run(() => api.contactUpdate(contact)),
+      deleteContact: (id) => run(() => api.contactDelete(id)),
+      addJob: (j) => run(() => api.jobCreate(j)),
+      updateJob: (job) => run(() => api.jobUpdate(job)),
+      deleteJob: (id) => run(() => api.jobDelete(id)),
 
-  const currentUser = state.db.users.find((u) => u.id === state.session) || null;
-  const role = currentUser?.role || null;
+      // Requests / alerts
+      createRequest: (fields) => run(() => api.requestCreate(fields)),
+      moveRequest: (id, day, time, driver) => run(() => api.requestMove(id, day, time, driver)),
+      completeRequest: (id) => run(() => api.requestComplete(id)),
+      addAlert: (a) => run(() => api.alertAdd({ kind: a.kind, headline: a.headline, meta: a.meta })),
+      markAllRead: () => run(() => api.alertsMarkRead()),
+
+      // Navigation
+      setTab: (tab) => dispatch({ type: 'SET_TAB', tab }),
+      openDetail: (id) => dispatch({ type: 'PUSH', overlay: { type: 'detail', id } }),
+      openNew: () => dispatch({ type: 'PUSH', overlay: { type: 'new' } }),
+      openCalendar: () => dispatch({ type: 'PUSH', overlay: { type: 'calendar' } }),
+      openManage: () => dispatch({ type: 'PUSH', overlay: { type: 'manage' } }),
+      back: () => dispatch({ type: 'POP' }),
+
+      // Live-update controls. A screen with its own drag/gesture state (the
+      // calendar) calls pausePolling() while a gesture is in progress and
+      // resumePolling() when it ends, so a background refresh can't disturb
+      // an interaction mid-flight.
+      pausePolling: () => { pausedRef.current = true; },
+      resumePolling: () => { pausedRef.current = false; },
+    };
+  }, []);
+
+  const currentUser = state.me;
+  const role = state.me?.role || null;
 
   const value = useMemo(
-    () => ({ ...state, ...state.db, currentUser, role, ...actions }),
+    () => ({ ...state, currentUser, role, ...actions }),
     [state, currentUser, role, actions],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
