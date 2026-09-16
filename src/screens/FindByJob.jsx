@@ -40,4 +40,47 @@ export default function FindByJob() {
               Job {activeJob.number}
             </span>
           )}
-          <button type="button" onClick={() => setStatusIdx((i) => (i + 1) % STATUS_CYCLE.length)} style={filterChip(statusIdx !==
+          <button type="button" onClick={() => setStatusIdx((i) => (i + 1) % STATUS_CYCLE.length)} style={filterChip(statusIdx !== 0)}>
+            {status}
+          </button>
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="screen__scroll" style={{ paddingBottom: 96 }}>
+        <div className="group-header">{countLabel}</div>
+        {results.length === 0 ? (
+          <div style={{ padding: '28px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+            {requests.length === 0 ? 'No requests yet.' : 'No matching requests.'}
+          </div>
+        ) : results.map((r) => (
+          <div key={r.id} onClick={() => openDetail(r.id)} role="button" tabIndex={0}
+            style={{ padding: '13px 20px', borderBottom: '1px solid var(--rule-light)', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <StatusChip status={r.status} />
+              <span style={{ marginLeft: 'auto', font: '600 11px/1 var(--font)', color: 'var(--text-label)' }}>REQ-{r.id}</span>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.3 }}>{r.title}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+              {r.day != null ? fmtDayTime(r.day, r.time) + (r.driver ? ' · ' + r.driver : '') : 'Needed ' + (r.neededBy || '—')}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bottombar" style={{ paddingBottom: 34 }}>
+        <TabBar />
+      </div>
+    </div>
+  );
+}
+
+function filterChip(active) {
+  return {
+    font: '800 10px/1 var(--font)', letterSpacing: '.08em', textTransform: 'uppercase',
+    padding: '6px 8px', cursor: 'pointer',
+    background: active ? 'var(--color-text)' : 'transparent',
+    color: active ? 'var(--color-bg)' : 'var(--color-text)',
+    border: active ? 0 : '1px solid var(--border-input)',
+  };
+}
