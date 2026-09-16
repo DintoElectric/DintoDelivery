@@ -32,6 +32,9 @@ export default function Alerts() {
       </div>
 
       <div className="screen__scroll" style={{ paddingBottom: 96 }}>
+        {alerts.length === 0 && (
+          <div style={{ padding: '28px 20px', color: 'var(--text-muted)', fontSize: 13 }}>No alerts yet.</div>
+        )}
         {order.map((day, di) => (
           <div key={day}>
             <div className={'group-header' + (di > 0 ? ' group-header--sep' : '')}>{day}</div>
