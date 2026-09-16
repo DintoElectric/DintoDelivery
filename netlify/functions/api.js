@@ -94,48 +94,59 @@ function alert({ kind, headline, meta }) {
 }
 
 export default async (req) => {
-  if (req.method !== 'POST') return err('POST only', 405);
-
-  let body;
-  try { body = await req.json(); } catch { return err('Bad JSON'); }
-  const action = body.action;
-  const store = getStore('app');
-  const db = (await store.get('db', { type: 'json' })) || emptyDB();
-  const save = () => store.setJSON('db', db);
-
-  // ---- public actions ----------------------------------------------------
-  if (action === 'register') {
-    const { name, username, password } = body;
-    if (!name || !username || !password) return err('Name, username and password are required.');
-    if (adminUsernames().length === 0) return err('Server is missing ADMIN_USERNAMES — no manager accounts can be created yet.', 500);
-    if (!isAdminUsername(username)) return err('Only pre-approved prefab-manager usernames can create an account here. Ask your admin to add you.');
-    const uname = username.trim().toLowerCase();
-    if (db.users.some((u) => u.username.toLowerCase() === uname)) return err('That account already exists — sign in instead.');
-    const { salt, hash } = hashPassword(password);
-    const user = { id: uid('u'), name: name.trim(), username: username.trim(), role: 'Shop manager', salt, hash };
-    db.users.push(user);
-    await save();
-    return json({ ok: true, token: signToken({ sub: user.id, role: user.role, name: user.name, username: user.username }), state: publicState(db, user) });
-  }
-
-  if (action === 'login') {
-    const { username, password } = body;
-    const u = db.users.find((x) => x.username.toLowerCase() === String(username || '').trim().toLowerCase());
-    if (!u || !verifyPassword(password || '', u.salt, u.hash)) return err('Wrong username or password.', 401);
-    return json({ ok: true, token: signToken({ sub: u.id, role: u.role, name: u.name, username: u.username }), state: publicState(db, u) });
-  }
-
-  // ---- everything else requires a valid session --------------------------
-  const auth = req.headers.get('authorization') || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  const claims = verifyToken(token);
-  if (!claims) return err('Not signed in.', 401);
-  const me = db.users.find((u) => u.id === claims.sub);
-  if (!me) return err('Account no longer exists.', 401);
-  const isManager = me.role === 'Shop manager';
-  const requireManager = () => { if (!isManager) throw { status: 403, message: 'Only a prefab manager can do that.' }; };
-
+  // Everything below is wrapped in one outer try/catch so any unexpected
+  // failure — a missing env var, a Blobs hiccup, anything — always comes back
+  // as a readable JSON error the client can show, instead of an unhandled
+  // crash that Netlify turns into a generic error page (which is what showed
+  // up client-side as a bare "Request failed.").
   try {
+    if (req.method !== 'POST') return err('POST only', 405);
+
+    // Fail fast, with a clear message, if the server isn't configured yet —
+    // rather than throwing later inside signToken() with no useful context.
+    if (!process.env.SESSION_SECRET) {
+      return err('Server misconfigured: SESSION_SECRET is not set in the environment. Set it in Netlify → Site settings → Environment variables and redeploy.', 500);
+    }
+
+    let body;
+    try { body = await req.json(); } catch { return err('Bad JSON'); }
+    const action = body.action;
+    const store = getStore('app');
+    const db = (await store.get('db', { type: 'json' })) || emptyDB();
+    const save = () => store.setJSON('db', db);
+
+    // ---- public actions ----------------------------------------------------
+    if (action === 'register') {
+      const { name, username, password } = body;
+      if (!name || !username || !password) return err('Name, username and password are required.');
+      if (adminUsernames().length === 0) return err('Server is missing ADMIN_USERNAMES — no manager accounts can be created yet.', 500);
+      if (!isAdminUsername(username)) return err('Only pre-approved prefab-manager usernames can create an account here. Ask your admin to add you.');
+      const uname = username.trim().toLowerCase();
+      if (db.users.some((u) => u.username.toLowerCase() === uname)) return err('That account already exists — sign in instead.');
+      const { salt, hash } = hashPassword(password);
+      const user = { id: uid('u'), name: name.trim(), username: username.trim(), role: 'Shop manager', salt, hash };
+      db.users.push(user);
+      await save();
+      return json({ ok: true, token: signToken({ sub: user.id, role: user.role, name: user.name, username: user.username }), state: publicState(db, user) });
+    }
+
+    if (action === 'login') {
+      const { username, password } = body;
+      const u = db.users.find((x) => x.username.toLowerCase() === String(username || '').trim().toLowerCase());
+      if (!u || !verifyPassword(password || '', u.salt, u.hash)) return err('Wrong username or password.', 401);
+      return json({ ok: true, token: signToken({ sub: u.id, role: u.role, name: u.name, username: u.username }), state: publicState(db, u) });
+    }
+
+    // ---- everything else requires a valid session --------------------------
+    const auth = req.headers.get('authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const claims = verifyToken(token);
+    if (!claims) return err('Not signed in.', 401);
+    const me = db.users.find((u) => u.id === claims.sub);
+    if (!me) return err('Account no longer exists.', 401);
+    const isManager = me.role === 'Shop manager';
+    const requireManager = () => { if (!isManager) throw { status: 403, message: 'Only a prefab manager can do that.' }; };
+
     switch (action) {
       case 'state':
         return json({ ok: true, state: publicState(db, me) });
@@ -247,7 +258,11 @@ export default async (req) => {
         return err('Unknown action: ' + action, 400);
     }
   } catch (e) {
+    // Catches everything: thrown {status,message} objects from requireManager(),
+    // Blobs failures, unexpected exceptions — anything at all in the try above.
+    // The client always gets back valid JSON with a readable message.
     if (e && e.status) return err(e.message, e.status);
-    return err('Server error.', 500);
+    const msg = (e && e.message) ? e.message : 'Unexpected server error.';
+    return err(msg, 500);
   }
 };
