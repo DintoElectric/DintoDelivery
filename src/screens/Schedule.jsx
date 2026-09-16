@@ -8,16 +8,16 @@ import TabBar from '../components/TabBar.jsx';
 const STATUS_TABS = ['Requested', 'Scheduled', 'Completed'];
 
 export default function Schedule() {
-  const { reqs, role, openDetail, openNew, openCalendar, setTab } = useApp();
+  const { requests, role, openDetail, openNew, openCalendar, setTab } = useApp();
   const [filter, setFilter] = useState('Requested');
 
   const counts = {
-    Requested: reqs.filter((r) => r.status === 'Requested').length,
-    Scheduled: reqs.filter((r) => r.status === 'Scheduled').length,
-    Completed: reqs.filter((r) => r.status === 'Completed').length,
+    Requested: requests.filter((r) => r.status === 'Requested').length,
+    Scheduled: requests.filter((r) => r.status === 'Scheduled').length,
+    Completed: requests.filter((r) => r.status === 'Completed').length,
   };
 
-  const inFilter = reqs.filter((r) => r.status === filter);
+  const inFilter = requests.filter((r) => r.status === filter);
 
   // Group the filtered rows the way the mockup does.
   let groups = [];
