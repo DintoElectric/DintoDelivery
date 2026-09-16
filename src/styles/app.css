@@ -1,0 +1,121 @@
+/* App scaffolding: the device frame, status bar, screen shell, and the
+   repeated Modernist primitives (chips, group headers, primary button, tabs).
+   Screen-specific layout lives inline in each screen, mirroring the handoff. */
+
+/* ---- Device stage & frame ------------------------------------------------ */
+.stage {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.frame {
+  position: relative;
+  width: var(--frame-w);
+  height: var(--frame-h);
+  max-height: calc(100dvh - 16px);
+  background: var(--color-bg);
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(45,43,43,.35);
+}
+/* On a real phone (narrow viewport) drop the frame chrome and fill the screen. */
+@media (max-width: 460px) {
+  .stage { padding: 0; align-items: stretch; }
+  .frame {
+    width: 100%; height: 100dvh; max-height: none; box-shadow: none;
+  }
+}
+
+/* Status bar (top safe area) */
+.statusbar {
+  position: absolute; top: 0; left: 0; right: 0; height: var(--safe-top);
+  z-index: 40; display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 24px 8px; pointer-events: none;
+}
+.statusbar .time { font-weight: 800; font-size: 15px; letter-spacing: .01em; }
+.statusbar .glyphs { display: flex; align-items: center; gap: 6px; }
+
+/* The scrollable screen body sits below the status bar. */
+.screen {
+  position: absolute; inset: 0; padding-top: var(--safe-top);
+  display: flex; flex-direction: column; background: var(--color-bg);
+}
+.screen__scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
+
+/* Push / modal transitions */
+@keyframes pushIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes modalIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.anim-push { animation: pushIn .26s cubic-bezier(.32,.72,0,1); }
+.anim-modal { animation: modalIn .3s cubic-bezier(.32,.72,0,1); }
+
+/* ---- Primitives ---------------------------------------------------------- */
+.eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-label);
+}
+.group-header {
+  padding: 9px 20px 7px; font-size: 10px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-label);
+  background: var(--color-surface); border-bottom: 1px solid var(--rule-light);
+}
+.group-header--sep { border-top: 2px solid var(--rule-strong); }
+
+/* Chips — 10px/800, .08em, 4px 6px, no radius */
+.chip {
+  display: inline-flex; align-items: center; font: 800 10px/1 var(--font);
+  letter-spacing: .08em; text-transform: uppercase; padding: 4px 6px; white-space: nowrap;
+}
+.chip--requested { border: 1px solid var(--color-text); color: var(--color-text); }
+.chip--scheduled { background: var(--color-text); color: var(--color-bg); }
+.chip--completed { background: var(--color-neutral-300); color: var(--color-neutral-800); }
+.chip--delivery  { background: var(--color-accent); color: var(--color-bg); }
+.chip--pickup    { border: 1px solid var(--color-accent); color: var(--color-accent-700); }
+
+/* Primary action button — flush-left label, solid accent */
+.btn-primary {
+  display: flex; align-items: center; justify-content: flex-start; gap: 9px;
+  width: 100%; border: 0; cursor: pointer; text-align: left;
+  background: var(--color-accent); color: var(--color-bg);
+  font: 800 13px/1.2 var(--font); letter-spacing: .04em; text-transform: uppercase;
+  padding: 13px 14px;
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-accent-600); }
+.btn-primary:active:not(:disabled) { background: var(--color-accent-700); }
+.btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border-input); color: var(--color-text);
+  font: 800 11px/1 var(--font); letter-spacing: .06em; text-transform: uppercase; padding: 9px 12px;
+}
+.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+
+/* Fixed bottom bar shared by several screens */
+.bottombar {
+  position: absolute; left: 0; right: 0; bottom: 0; background: var(--color-bg);
+  border-top: 2px solid var(--rule-strong);
+}
+
+/* ---- Tab bar ------------------------------------------------------------- */
+.tabbar { display: flex; }
+.tabbar__cell {
+  flex: 1; padding: 11px 4px 4px; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; background: transparent; border: 0; cursor: pointer;
+}
+.tabbar__label {
+  font: 800 9px/1 var(--font); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-label);
+}
+.tabbar__cell--active .tabbar__label { color: var(--color-accent); }
+
+/* Request rows */
+.req-row { padding: 14px 20px; border-bottom: 1px solid var(--rule-light); cursor: pointer; }
+.req-row--raised { background: var(--color-raised); }
+.req-row:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.req-row__title {
+  font-size: 17px; font-weight: 800; letter-spacing: -.01em; line-height: 1.25; margin-bottom: 8px;
+}
+.req-row__meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.req-row__id { margin-left: auto; font: 600 11px/1 var(--font); color: var(--text-label); }
+.req-row__detail { font-size: 12px; color: var(--text-muted); }
