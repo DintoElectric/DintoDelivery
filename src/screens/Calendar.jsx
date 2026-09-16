@@ -22,7 +22,7 @@ function bannerStyle(status, big) {
 }
 
 export default function Calendar() {
-  const { requests, moveRequest, back, openDetail } = useApp();
+  const { requests, moveRequest, back, openDetail, pausePolling, resumePolling } = useApp();
   const [selectedDay, setSelectedDay] = useState(15);
   const [sheetId, setSheetId] = useState(null);
   const [drag, setDrag] = useState(null);   // { id, x, y, moved }
@@ -34,6 +34,9 @@ export default function Calendar() {
 
   const startDrag = (id, e) => {
     e.preventDefault();
+    // Hold off background refreshes for the duration of this gesture (tap or
+    // drag) so a poll landing mid-interaction can't shift banners underfoot.
+    pausePolling();
     const begin = { id, x: e.clientX, y: e.clientY, moved: false };
     dragRef.current = begin; hoverRef.current = null;
     setDrag(begin); setHover(null);
@@ -49,6 +52,7 @@ export default function Calendar() {
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      resumePolling();
       const d = dragRef.current;
       const h = hoverRef.current;
       dragRef.current = null; hoverRef.current = null;
