@@ -1,0 +1,51 @@
+import { Calendar, FileText, Bell, User } from 'lucide-react';
+import { useApp } from '../state/store.jsx';
+
+const TABS = [
+  { key: 'schedule', label: 'Schedule', Icon: Calendar },
+  { key: 'requests', label: 'Requests', Icon: FileText },
+  { key: 'alerts',   label: 'Alerts',   Icon: Bell },
+  { key: 'me',       label: 'Me',       Icon: User },
+];
+
+// Tabs a given role is allowed to see. Drivers don't get the Requests
+// (find-by-job) screen — they work the schedule and mark runs completed.
+const HIDDEN_TABS = {
+  Driver: ['requests'],
+};
+
+export default function TabBar() {
+  const { tab, setTab, alerts, role } = useApp();
+  const unread = alerts.some((a) => a.unread);
+  const hidden = HIDDEN_TABS[role] || [];
+  const tabs = TABS.filter((t) => !hidden.includes(t.key));
+
+  return (
+    <div className="tabbar">
+      {tabs.map(({ key, label, Icon }) => {
+        const active = tab === key;
+        const color = active ? 'var(--color-accent)' : 'var(--text-label)';
+        return (
+          <button
+            key={key}
+            type="button"
+            className={'tabbar__cell' + (active ? ' tabbar__cell--active' : '')}
+            onClick={() => setTab(key)}
+            aria-current={active ? 'page' : undefined}
+          >
+            <span style={{ position: 'relative', display: 'block' }}>
+              <Icon size={20} strokeWidth={2} color={color} />
+              {key === 'alerts' && unread && (
+                <span style={{
+                  position: 'absolute', top: -1, right: -3, width: 8, height: 8,
+                  background: 'var(--color-accent)',
+                }} />
+              )}
+            </span>
+            <span className="tabbar__label">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

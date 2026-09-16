@@ -1,0 +1,58 @@
+/* Modernist — design-system tokens, ported from the handoff's styles.css.
+   Flat, architectural, zero radius, one typeface (Archivo), one red accent. */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
+
+:root {
+  /* Core roles */
+  --color-bg: #f3f2f2;        /* ground — page background */
+  --color-surface: #eae9e9;   /* group headers, tray, assignment block */
+  --color-raised: #f8f4f4;    /* unread/unscheduled rows, input fills, sheet */
+  --color-text: #201e1d;      /* ink — text, 2px rules, Scheduled fill */
+  --color-accent: #ec3013;    /* primary actions, active tab, badges, ghost */
+  --color-accent-600: #dd2b0f;/* hover */
+  --color-accent-700: #ae1800;/* pressed / accent text on light */
+  --color-accent-200: #ffe0d9;/* drop-target highlight, Requested banner */
+  --color-accent-800: #7c1405;/* text on accent tint */
+  --color-neutral-300: #d7d3d3;/* Completed fill */
+  --color-neutral-800: #444141;/* text on neutral fill */
+  --color-outofmonth: #e4e2e2; /* empty calendar cells */
+
+  /* Rules & ink-alpha text */
+  --rule-strong: #201e1d;                 /* 2px section dividers */
+  --rule-light: rgba(32,30,29,.25);       /* list row dividers */
+  --rule-hairline: rgba(32,30,29,.18);    /* calendar cell verticals */
+  --border-input: rgba(32,30,29,.4);      /* field & secondary-button borders */
+  --text-muted: rgba(32,30,29,.62);       /* meta lines */
+  --text-label: rgba(32,30,29,.55);       /* uppercase labels */
+  --text-disabled: rgba(32,30,29,.3);     /* inactive text, future timeline step */
+
+  --font: "Archivo", system-ui, sans-serif;
+
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-6: 24px; --space-8: 32px;
+
+  --radius: 0px; /* zero everywhere, on purpose */
+
+  --shadow-sheet: 0 -12px 32px rgba(45,43,43,.18);
+  --shadow-ghost: 0 12px 32px rgba(45,43,43,.22);
+
+  /* iPhone 16 Pro logical frame */
+  --frame-w: 402px;
+  --frame-h: 874px;
+  --safe-top: 58px;    /* status bar */
+  --safe-bottom: 34px; /* home indicator */
+}
+
+* , *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--color-text);
+  background: #d9d7d7;              /* neutral stage behind the device */
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
