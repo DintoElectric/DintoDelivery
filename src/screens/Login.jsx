@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useApp } from '../state/store.jsx';
 
-// Shown whenever no one is signed in. If there are no users yet (first run),
-// it becomes a one-time setup for the shop-manager (admin) account.
+// Sign-in for everyone. Prefab managers whose username is on the server's
+// approved list (ADMIN_USERNAMES) can self-provision their own account via the
+// "Set up a manager account" toggle; everyone else is created by a manager.
 export default function Login() {
-  const { users, login, setupAdmin } = useApp();
-  const firstRun = users.length === 0;
+  const { login, register } = useApp();
+  const [mode, setMode] = useState('signin'); // signin | setup
 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -13,21 +14,21 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const canSubmit = firstRun
+  const setup = mode === 'setup';
+  const canSubmit = setup
     ? name.trim() && username.trim() && password
     : username.trim() && password;
 
   const submit = async () => {
     if (!canSubmit || busy) return;
     setBusy(true); setError('');
-    const res = firstRun
-      ? await setupAdmin({ name: name.trim(), username, password })
-      : await login({ username, password });
+    const res = setup ? await register(name.trim(), username, password) : await login(username, password);
     setBusy(false);
     if (!res.ok) setError(res.error || 'Something went wrong.');
   };
-
   const onKey = (e) => { if (e.key === 'Enter') submit(); };
+
+  const swap = () => { setMode(setup ? 'signin' : 'setup'); setError(''); };
 
   return (
     <div className="screen" style={{ justifyContent: 'flex-start' }}>
@@ -40,18 +41,18 @@ export default function Login() {
 
       <div className="screen__scroll" style={{ padding: '24px' }}>
         <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.01em', marginBottom: 4 }}>
-          {firstRun ? 'Set up the shop manager' : 'Sign in'}
+          {setup ? 'Set up a manager account' : 'Sign in'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 20 }}>
-          {firstRun
-            ? 'Create the manager account. You can add foremen, drivers and PMs afterward from the Manage screen.'
-            : 'Use the username and password your shop manager set up for you.'}
+          {setup
+            ? 'For approved prefab managers only. Use your assigned username to create your login. Then add the rest of the team from Manage.'
+            : 'Use the username and password your prefab manager set up for you.'}
         </div>
 
-        {firstRun && (
+        {setup && (
           <Labeled label="Your name">
             <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onKey}
-              placeholder="J. Dinto" style={input} />
+              placeholder="Harry" style={input} />
           </Labeled>
         )}
         <Labeled label="Username">
@@ -67,9 +68,13 @@ export default function Login() {
           <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--color-accent-700)', margin: '4px 0 12px' }}>{error}</div>
         )}
 
-        <button type="button" className="btn-primary" onClick={submit} disabled={!canSubmit || busy}
-          style={{ marginTop: 8 }}>
-          {busy ? 'Please wait…' : (firstRun ? 'Create account & sign in' : 'Sign in')}
+        <button type="button" className="btn-primary" onClick={submit} disabled={!canSubmit || busy} style={{ marginTop: 8 }}>
+          {busy ? 'Please wait…' : (setup ? 'Create account & sign in' : 'Sign in')}
+        </button>
+
+        <button type="button" onClick={swap}
+          style={{ marginTop: 18, background: 'transparent', border: 0, cursor: 'pointer', font: '800 11px/1 var(--font)', letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+          {setup ? 'Have an account? Sign in' : 'Prefab manager? Set up your account'}
         </button>
       </div>
     </div>
