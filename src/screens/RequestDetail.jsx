@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useApp, primaryActionFor } from '../state/store.jsx';
-import { REQUEST_DETAIL, SLOTS, DRIVERS, JOBS } from '../data/seed.js';
+import { SLOTS } from '../data/seed.js';
 import { StatusChip, TypeChip } from '../components/Chip.jsx';
-import { fmtTime, fmtDay, dowIndex } from '../lib/format.js';
+import { fmtTime, fmtDay } from '../lib/format.js';
 
 const STEP_ORDER = ['Requested', 'Scheduled', 'Completed'];
-// Selectable schedule dates (Sep day numbers) offered to the shop manager.
-const DATE_OPTIONS = [15, 16, 17, 18, 19];
+const DATE_OPTIONS = [15, 16, 17, 18, 19]; // demo month day numbers
 
 function windowLabel(startHH) {
   const endH = String((parseInt(startHH.slice(0, 2), 10) + 1)).padStart(2, '0');
@@ -15,33 +14,35 @@ function windowLabel(startHH) {
 }
 
 export default function RequestDetail({ id }) {
-  const { reqs, role, back, moveRequest, completeRequest, addAlert } = useApp();
-  const req = reqs.find((r) => r.id === id);
-  const d = REQUEST_DETAIL[id] || {};
+  const { requests, role, back, moveRequest, completeRequest, addAlert, users, contacts } = useApp();
+  const req = requests.find((r) => r.id === id);
+  const drivers = users.filter((u) => u.role === 'Driver');
 
   const [date, setDate] = useState(req?.day ?? 16);
   const [win, setWin] = useState(req?.time ?? '14:00');
-  const [driver, setDriver] = useState(req?.driver ?? DRIVERS[0]);
+  const [driver, setDriver] = useState(req?.driver ?? (drivers[0]?.name ?? ''));
 
   if (!req) return null;
 
-  const jobName = d.jobName || (JOBS.find((j) => j.number === req.job)?.name) || '';
+  const contact = contacts.find((c) => c.id === req.contactId) || null;
+  const contactName = req.contact || contact?.name || '';
+  const contactPhone = req.contactPhone || contact?.phone || '';
+  const contactEmail = req.contactEmail || contact?.email || '';
   const currentStep = STEP_ORDER.indexOf(req.status);
 
   const onPrimary = () => {
     if (role === 'Shop manager') {
-      moveRequest(id, date, win);
+      moveRequest(id, date, win, driver);
       addAlert({
         id: 'al' + Date.now(), day: 'Today', kind: 'Scheduled', unread: true,
         headline: `REQ-${id} set for ${fmtDay(date)}, ${fmtTime(win)} — ${req.title}`,
-        meta: `${req.route} · Driver ${driver} · just now`,
+        meta: `${req.route}${driver ? ' · Driver ' + driver : ''} · just now`,
       });
     } else if (role === 'Driver') {
       completeRequest(id);
       addAlert({
         id: 'al' + Date.now(), day: 'Today', kind: 'Completed', unread: true,
-        headline: `REQ-${id} delivered and signed for`,
-        meta: `${driver} · just now`,
+        headline: `REQ-${id} delivered and signed for`, meta: 'just now',
       });
     } else {
       addAlert({
@@ -59,7 +60,7 @@ export default function RequestDetail({ id }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 12px', borderBottom: '2px solid var(--rule-strong)' }}>
         <button type="button" onClick={back}
           style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 0, cursor: 'pointer', font: '800 11px/1 var(--font)', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
-          <ChevronLeft size={14} strokeWidth={2.4} color="var(--color-accent)" />Schedule
+          <ChevronLeft size={14} strokeWidth={2.4} color="var(--color-accent)" />Back
         </button>
         <div style={{ font: '600 11px/1 var(--font)', color: 'var(--text-label)' }}>REQ-{id}</div>
       </div>
@@ -73,7 +74,7 @@ export default function RequestDetail({ id }) {
           </div>
           <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1.14 }}>{req.title}</div>
           <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text-muted)', marginTop: 8 }}>
-            {d.raisedBy ? `Raised by ${d.raisedBy} · ${d.raisedAt}` : `Raised · ${req.contact}`}
+            {req.raisedByName ? `Raised by ${req.raisedByName}${req.raisedByRole ? ', ' + req.raisedByRole.toLowerCase() : ''}` : 'Raised'}
           </div>
         </div>
 
@@ -86,11 +87,9 @@ export default function RequestDetail({ id }) {
             const last = i === STEP_ORDER.length - 1;
             const marker = done
               ? { background: 'var(--color-accent)' }
-              : (i === currentStep + 1
-                  ? { border: '2px solid var(--color-text)' }
-                  : { border: '2px solid rgba(32,30,29,.3)' });
+              : (i === currentStep + 1 ? { border: '2px solid var(--color-text)' } : { border: '2px solid rgba(32,30,29,.3)' });
             const sub = {
-              Requested: d.raisedAt ? `${d.raisedAt} · ${d.raisedBy?.split(',')[0] || req.contact}` : 'Raised',
+              Requested: req.raisedByName || 'Raised',
               Scheduled: req.day != null ? `${fmtDay(req.day)}, ${fmtTime(req.time)}` : 'Awaiting a date from the shop',
               Completed: 'Driver confirms the drop',
             }[step];
@@ -112,27 +111,29 @@ export default function RequestDetail({ id }) {
         {/* Details grid */}
         <div style={{ borderBottom: '1px solid var(--rule-light)' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--rule-light)' }}>
-            <Cell label="Job" value={req.job} sub={jobName} border />
-            <Cell label="Needed by" value={d.neededBy || req.neededBy || '—'} sub={d.neededByNote} />
+            <Cell label="Job" value={req.job} sub={req.jobName} border />
+            <Cell label="Needed by" value={req.neededBy || '—'} />
           </div>
           <div style={{ padding: '13px 20px', borderBottom: '1px solid var(--rule-light)' }}>
             <div className="eyebrow" style={{ marginBottom: 6 }}>Route</div>
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 3 }}>Pick up — {d.pickup || req.route.split(' → ')[0]}</div>
-            <div style={{ fontSize: 14, fontWeight: 800 }}>Drop off — {d.dropoff || req.route.split(' → ')[1]}</div>
-            {d.routeNote && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{d.routeNote}</div>}
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 3 }}>Pick up — {req.pickup || req.route.split(' → ')[0]}</div>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>Drop off — {req.dropoff || req.route.split(' → ')[1]}</div>
           </div>
-          <div style={{ padding: '13px 20px' }}>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>Site contact</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>{d.contactName || req.contact}</div>
-                {d.contactPhone && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.contactPhone}</div>}
+          {(contactName || contactPhone || contactEmail) && (
+            <div style={{ padding: '13px 20px' }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Site contact</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>{contactName || '—'}</div>
+                  {contactPhone && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{contactPhone}</div>}
+                  {contactEmail && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{contactEmail}</div>}
+                </div>
+                {contactPhone && (
+                  <a className="btn-secondary" href={`tel:${contactPhone.replace(/[^\d+]/g, '')}`} style={{ textDecoration: 'none' }}>Call</a>
+                )}
               </div>
-              {d.contactPhone && (
-                <a className="btn-secondary" href={`tel:${d.contactPhone.replace(/[^\d+]/g, '')}`} style={{ textDecoration: 'none' }}>Call</a>
-              )}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Shop assignment */}
@@ -154,13 +155,14 @@ export default function RequestDetail({ id }) {
               </div>
               <Field label="Driver">
                 <select value={driver} onChange={(e) => setDriver(e.target.value)} style={selectStyle}>
-                  {DRIVERS.map((dr) => <option key={dr} value={dr}>{dr}</option>)}
+                  {drivers.length === 0 && <option value="">No drivers set up</option>}
+                  {drivers.map((dr) => <option key={dr.id} value={dr.name}>{dr.name}</option>)}
                 </select>
               </Field>
             </>
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {req.day != null ? `${fmtDay(req.day)}, ${fmtTime(req.time)} · ${req.driver || DRIVERS[0]}` : 'Not scheduled yet — the shop assigns date, window and driver.'}
+              {req.day != null ? `${fmtDay(req.day)}, ${fmtTime(req.time)}${req.driver ? ' · ' + req.driver : ''}` : 'Not scheduled yet — the shop assigns date, window and driver.'}
             </div>
           )}
         </div>
@@ -170,7 +172,7 @@ export default function RequestDetail({ id }) {
       <div className="bottombar" style={{ padding: '14px 20px 44px' }}>
         <button type="button" className="btn-primary" onClick={onPrimary}>{primaryActionFor(role)}</button>
         <div style={{ fontSize: 11, color: 'var(--text-label)', marginTop: 9 }}>
-          Notifies {req.contact}, {req.driver || DRIVERS[0]} and the PM on job {req.job}.
+          Notifies the requester{req.driver ? ', ' + req.driver : ''} and the PM on job {req.job}.
         </div>
       </div>
     </div>
