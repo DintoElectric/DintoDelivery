@@ -1,6 +1,6 @@
 // Constants only. All operational data (jobs, contacts, users, requests,
-// alerts) is entered by the shop manager and persisted via src/lib/db.js —
-// there is no preloaded content.
+// alerts) is entered by the shop manager and persisted server-side via
+// netlify/functions/api.js + Netlify Blobs — there is no preloaded content.
 
 // The calendar renders a fixed demo month. Swap these for a real date library
 // when the calendar needs to page across months.
