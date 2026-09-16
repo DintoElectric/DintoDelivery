@@ -21,6 +21,8 @@ export default function RequestDetail({ id }) {
   const [date, setDate] = useState(req?.day ?? 16);
   const [win, setWin] = useState(req?.time ?? '14:00');
   const [driver, setDriver] = useState(req?.driver ?? (drivers[0]?.name ?? ''));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   if (!req) return null;
 
@@ -30,27 +32,28 @@ export default function RequestDetail({ id }) {
   const contactEmail = req.contactEmail || contact?.email || '';
   const currentStep = STEP_ORDER.indexOf(req.status);
 
-  const onPrimary = () => {
+  const onPrimary = async () => {
+    if (busy) return;
+    setBusy(true); setError('');
+    let res;
     if (role === 'Shop manager') {
-      moveRequest(id, date, win, driver);
-      addAlert({
-        id: 'al' + Date.now(), day: 'Today', kind: 'Scheduled', unread: true,
-        headline: `REQ-${id} set for ${fmtDay(date)}, ${fmtTime(win)} — ${req.title}`,
-        meta: `${req.route}${driver ? ' · Driver ' + driver : ''} · just now`,
-      });
+      // The server creates the matching "Scheduled" alert as part of this
+      // same call — no separate client-side alert write here (two racing
+      // writes from one click is what let a submission silently vanish).
+      res = await moveRequest(id, date, win, driver);
     } else if (role === 'Driver') {
-      completeRequest(id);
-      addAlert({
-        id: 'al' + Date.now(), day: 'Today', kind: 'Completed', unread: true,
-        headline: `REQ-${id} delivered and signed for`, meta: 'just now',
-      });
+      res = await completeRequest(id);
     } else {
-      addAlert({
-        id: 'al' + Date.now(), day: 'Today', kind: 'New request', unread: true,
+      // No dedicated server action for a nudge/follow, so this is the only
+      // write for this path — safe to fire on its own.
+      res = await addAlert({
+        kind: 'New request',
         headline: role === 'Field foreman' ? `Nudge sent on REQ-${id}` : `Following REQ-${id}`,
         meta: 'just now',
       });
     }
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'That didn’t go through. Please try again.'); return; }
     back();
   };
 
@@ -170,7 +173,12 @@ export default function RequestDetail({ id }) {
 
       {/* Bottom bar */}
       <div className="bottombar" style={{ padding: '14px 20px 44px' }}>
-        <button type="button" className="btn-primary" onClick={onPrimary}>{primaryActionFor(role)}</button>
+        {error && (
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--color-accent-700)', marginBottom: 9 }}>{error}</div>
+        )}
+        <button type="button" className="btn-primary" onClick={onPrimary} disabled={busy}>
+          {busy ? 'Please wait…' : primaryActionFor(role)}
+        </button>
         <div style={{ fontSize: 11, color: 'var(--text-label)', marginTop: 9 }}>
           Notifies the requester{req.driver ? ', ' + req.driver : ''} and the PM on job {req.job}.
         </div>
