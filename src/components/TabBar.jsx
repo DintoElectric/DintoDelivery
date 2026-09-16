@@ -8,13 +8,21 @@ const TABS = [
   { key: 'me',       label: 'Me',       Icon: User },
 ];
 
+// Tabs a given role is allowed to see. Drivers don't get the Requests
+// (find-by-job) screen — they work the schedule and mark runs completed.
+const HIDDEN_TABS = {
+  Driver: ['requests'],
+};
+
 export default function TabBar() {
-  const { tab, setTab, alerts } = useApp();
+  const { tab, setTab, alerts, role } = useApp();
   const unread = alerts.some((a) => a.unread);
+  const hidden = HIDDEN_TABS[role] || [];
+  const tabs = TABS.filter((t) => !hidden.includes(t.key));
 
   return (
     <div className="tabbar">
-      {TABS.map(({ key, label, Icon }) => {
+      {tabs.map(({ key, label, Icon }) => {
         const active = tab === key;
         const color = active ? 'var(--color-accent)' : 'var(--text-label)';
         return (
