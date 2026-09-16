@@ -18,14 +18,16 @@ const TAB_SCREENS = {
 };
 
 export default function App() {
-  const { currentUser, tab, stack } = useApp();
+  const { currentUser, role, tab, stack } = useApp();
 
   // Not signed in → the only thing you can reach is the login / first-run setup.
   if (!currentUser) {
     return <PhoneFrame><Login /></PhoneFrame>;
   }
 
-  const Base = TAB_SCREENS[tab] || Schedule;
+  // Drivers have no Requests tab; never resolve to it.
+  const effectiveTab = (role === 'Driver' && tab === 'requests') ? 'schedule' : tab;
+  const Base = TAB_SCREENS[effectiveTab] || Schedule;
 
   return (
     <PhoneFrame>
