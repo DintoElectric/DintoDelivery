@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../state/store.jsx';
-import { SLOTS, REQUEST_DETAIL, YEAR, MONTH_LABEL } from '../data/seed.js';
+import { SLOTS, YEAR, MONTH_LABEL } from '../data/seed.js';
 import { monthGrid, fmtTime, fmtDay } from '../lib/format.js';
 import { StatusChip, TypeChip } from '../components/Chip.jsx';
 
@@ -22,7 +22,7 @@ function bannerStyle(status, big) {
 }
 
 export default function Calendar() {
-  const { reqs, moveRequest, back, openDetail } = useApp();
+  const { requests, moveRequest, back, openDetail } = useApp();
   const [selectedDay, setSelectedDay] = useState(15);
   const [sheetId, setSheetId] = useState(null);
   const [drag, setDrag] = useState(null);   // { id, x, y, moved }
@@ -73,14 +73,13 @@ export default function Calendar() {
   );
 
   const weeks = monthGrid();
-  const tray = reqs.filter((r) => r.day === null);
+  const tray = requests.filter((r) => r.day === null);
   const slots = SLOTS.map((t) => ({
     key: t, label: fmtTime(t), drop: selectedDay + '|' + t,
-    banners: reqs.filter((r) => r.day === selectedDay && r.time === t),
+    banners: requests.filter((r) => r.day === selectedDay && r.time === t),
   }));
-  const sheet = reqs.find((r) => r.id === sheetId) || null;
-  const sd = sheet ? (REQUEST_DETAIL[sheet.id] || {}) : {};
-  const dragReq = drag ? reqs.find((r) => r.id === drag.id) : null;
+  const sheet = requests.find((r) => r.id === sheetId) || null;
+  const dragReq = drag ? requests.find((r) => r.id === drag.id) : null;
 
   return (
     <div className="screen anim-push" style={{ position: 'absolute' }}>
@@ -134,7 +133,7 @@ export default function Calendar() {
                   onClick={() => cell.inMonth && setSelectedDay(cell.day)}
                   style={{ minHeight: 108, padding: 4, borderRight: '1px solid var(--rule-hairline)', background: bg }}>
                   <div style={{ font: '800 11px/1 var(--font)', marginBottom: 3, color: numColor }}>{cell.num}</div>
-                  {cell.inMonth && reqs.filter((r) => r.day === cell.day).map((r) => <Banner key={r.id} r={r} />)}
+                  {cell.inMonth && requests.filter((r) => r.day === cell.day).map((r) => <Banner key={r.id} r={r} />)}
                 </div>
               );
             })}
@@ -181,7 +180,7 @@ export default function Calendar() {
               <div style={{ fontSize: 13, fontWeight: 800 }}>{sheet.job}</div>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{sheet.route} · {sd.contactName || sheet.contact}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{sheet.route}{sheet.contact ? ' · ' + sheet.contact : ''}</div>
           <button type="button" className="btn-primary" onClick={() => { const id = sheet.id; setSheetId(null); openDetail(id); }}>Open full request</button>
         </div>
       )}
