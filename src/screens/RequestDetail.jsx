@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Trash2 } from 'lucide-react';
 import { useApp, primaryActionFor } from '../state/store.jsx';
 import { SLOTS } from '../data/seed.js';
 import { StatusChip, TypeChip } from '../components/Chip.jsx';
@@ -14,9 +14,10 @@ function windowLabel(startHH) {
 }
 
 export default function RequestDetail({ id }) {
-  const { requests, role, back, moveRequest, completeRequest, addAlert, users, contacts } = useApp();
+  const { requests, role, back, moveRequest, completeRequest, deleteRequest, addAlert, users, contacts } = useApp();
   const req = requests.find((r) => r.id === id);
   const drivers = users.filter((u) => u.role === 'Driver');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const [date, setDate] = useState(req?.day ?? 16);
   const [win, setWin] = useState(req?.time ?? '14:00');
@@ -54,6 +55,16 @@ export default function RequestDetail({ id }) {
     }
     setBusy(false);
     if (!res.ok) { setError(res.error || 'That didn’t go through. Please try again.'); return; }
+    back();
+  };
+
+  const onDelete = async () => {
+    if (busy) return;
+    if (!confirmingDelete) { setConfirmingDelete(true); return; }
+    setBusy(true); setError('');
+    const res = await deleteRequest(id);
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'Could not delete this request.'); setConfirmingDelete(false); return; }
     back();
   };
 
@@ -169,6 +180,34 @@ export default function RequestDetail({ id }) {
             </div>
           )}
         </div>
+
+        {/* Delete (shop manager only) */}
+        {role === 'Shop manager' && (
+          <div style={{ padding: '16px 20px' }}>
+            {!confirmingDelete ? (
+              <button type="button" onClick={() => setConfirmingDelete(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid var(--color-accent-700)', color: 'var(--color-accent-700)', font: '800 11px/1 var(--font)', letterSpacing: '.06em', textTransform: 'uppercase', padding: '9px 12px', cursor: 'pointer' }}>
+                <Trash2 size={13} strokeWidth={2} color="var(--color-accent-700)" />
+                Delete request
+              </button>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--color-accent-700)', marginBottom: 8 }}>
+                  Delete REQ-{id}? This can't be undone.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn-secondary" onClick={() => setConfirmingDelete(false)} disabled={busy}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={onDelete} disabled={busy}
+                    style={{ flex: 1, border: '1px solid var(--color-accent-700)', background: 'transparent', color: 'var(--color-accent-700)', font: '800 11px/1 var(--font)', letterSpacing: '.06em', textTransform: 'uppercase', padding: '10px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                    {busy ? 'Deleting…' : 'Yes, delete'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bottom bar */}
