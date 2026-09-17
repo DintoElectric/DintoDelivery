@@ -135,6 +135,7 @@ export function AppProvider({ children }) {
       createRequest: (fields) => run(() => api.requestCreate(fields)),
       moveRequest: (id, day, time, driver) => run(() => api.requestMove(id, day, time, driver)),
       completeRequest: (id) => run(() => api.requestComplete(id)),
+      deleteRequest: (id) => run(() => api.requestDelete(id)),
       addAlert: (a) => run(() => api.alertAdd({ kind: a.kind, headline: a.headline, meta: a.meta })),
       markAllRead: () => run(() => api.alertsMarkRead()),
 
