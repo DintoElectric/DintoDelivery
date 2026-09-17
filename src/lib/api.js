@@ -63,5 +63,6 @@ export const jobDelete    = (id) => call('job-delete', { id });
 export const requestCreate = (fields) => call('request-create', { fields });
 export const requestMove  = (id, day, time, driver) => call('request-move', { id, day, time, driver });
 export const requestComplete = (id) => call('request-complete', { id });
+export const requestDelete = (id) => call('request-delete', { id });
 export const alertAdd     = (a) => call('alert-add', a);
 export const alertsMarkRead = () => call('alerts-mark-read');
