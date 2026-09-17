@@ -317,6 +317,15 @@ export default async (req) => {
         });
         return json({ ok: true, state: publicState(db, me) });
       }
+      case 'request-delete': {
+        const { db } = await mutateDB(store, (db) => {
+          requireManager();
+          const before = db.requests.length;
+          db.requests = db.requests.filter((r) => r.id !== body.id);
+          if (db.requests.length === before) fail(400, 'No such request.');
+        });
+        return json({ ok: true, state: publicState(db, me) });
+      }
 
       // --- Alerts ---------------------------------------------------------
       case 'alert-add': {
